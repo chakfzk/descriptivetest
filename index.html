@@ -318,7 +318,10 @@
                 return;
             }
             const question = questions.find(q => q.id === activeQuestionId);
-            if (!question) return;
+            if (!question) {
+                 contentContainer.innerHTML = `<div class="text-center py-20"><h2 class="text-xl font-semibold text-gray-700">문제를 불러오는 중입니다...</h2></div>`;
+                 return;
+            }
 
             const questionSubmissions = submissions[activeQuestionId] || {};
             const hasSubmissions = Object.values(questionSubmissions).length > 0;
@@ -363,7 +366,10 @@
                 return;
             }
             const question = questions.find(q => q.id === activeQuestionId);
-            if (!question) return;
+            if (!question) {
+                 contentContainer.innerHTML = `<div class="text-center py-20"><h2 class="text-xl font-semibold text-gray-700">문제를 불러오는 중입니다...</h2></div>`;
+                 return;
+            }
 
             const mySubmission = submissions[activeQuestionId]?.[currentStudentIdentifier];
             const lastAttempt = mySubmission ? mySubmission.attempts[mySubmission.attempts.length - 1] : null;
@@ -684,4 +690,5 @@
     </script>
 </body>
 </html>
+
 
