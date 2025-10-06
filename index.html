@@ -325,11 +325,10 @@
             const submissionListHTML = hasSubmissions
                 ? `<ul class="space-y-3">${Object.values(questionSubmissions).sort((a,b) => a.studentIdentifier.localeCompare(b.studentIdentifier)).map(sub => {
                     const lastAttempt = sub.attempts[sub.attempts.length - 1];
-                    const isGraded = lastAttempt.scores !== null;
+                    const isGraded = lastAttempt && lastAttempt.scores !== null;
                     const totalScore = isGraded ? Object.values(lastAttempt.scores).reduce((a, b) => a + b, 0) : 0;
-                    // ✅ 데이터 안정성 강화
-                    const maxScore = Array.isArray(question.rubric) ? question.rubric.reduce((a, b) => a + b.maxScore, 0) : 0;
-                    const isPerfect = isGraded && totalScore === maxScore;
+                    const maxScore = Array.isArray(question.rubric) ? question.rubric.reduce((a, b) => a + (b.maxScore || 0), 0) : 0;
+                    const isPerfect = isGraded && totalScore === maxScore && maxScore > 0;
                     let statusBadge = isPerfect ? `<span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">만점</span>`
                         : isGraded ? `<span class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">채점 완료</span>`
                         : `<span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">채점 대기중</span>`;
@@ -369,10 +368,15 @@
             }
 
             const mySubmission = submissions[activeQuestionId]?.[currentStudentIdentifier];
-            const lastAttempt = mySubmission ? mySubmission.attempts[mySubmission.attempts.length - 1] : null;
-            const isGraded = lastAttempt?.scores !== null;
+            
+            // ✅ 오류 수정: lastAttempt가 null/undefined일 때 발생하는 오류를 막기 위해 안정성 강화
+            const lastAttempt = mySubmission && Array.isArray(mySubmission.attempts) && mySubmission.attempts.length > 0
+                ? mySubmission.attempts[mySubmission.attempts.length - 1]
+                : null;
+            
+            const isGraded = !!(lastAttempt && lastAttempt.scores);
             const needsSubmission = !lastAttempt || isGraded;
-            // ✅ 데이터 안정성 강화
+            
             const maxScore = Array.isArray(question.rubric) ? question.rubric.reduce((a, b) => a + (b.maxScore || 0), 0) : 0;
             const totalScore = isGraded ? Object.values(lastAttempt.scores).reduce((a, b) => a + b, 0) : 0;
             const isPerfect = isGraded && totalScore === maxScore && maxScore > 0;
@@ -449,7 +453,6 @@
         }
 
         async function generateAIFeedbackForStudent(question, studentAnswer) {
-             // ✅ 데이터 안정성 강화
              const rubricString = Array.isArray(question.rubric) ? question.rubric.map(r => `- ${r.criterion} (${r.maxScore}점)`).join('\n') : '채점 기준 없음';
             
             const systemPrompt = "당신은 학생들의 서술형 답안을 채점하고 건설적인 피드백을 제공하는 유능하고 친절한 AI 선생님입니다. 제시된 채점 기준(루브릭)에 따라 학생의 답변을 엄격하고 객관적으로 평가해주세요. 학생이 더 발전할 수 있도록 긍정적이고 구체적인 조언을 담아 피드백을 작성해야 합니다.";
@@ -500,7 +503,6 @@
             if (aiResponseText) {
                 const aiData = JSON.parse(aiResponseText);
                 const scoresObject = {};
-                // ✅ 데이터 안정성 강화
                 if (Array.isArray(aiData.scores) && Array.isArray(question.rubric)) {
                     aiData.scores.forEach(item => {
                         const rubricItem = question.rubric.find(r => r.criterion === item.criterion);
