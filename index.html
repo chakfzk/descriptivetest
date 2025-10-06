@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>양방향 학습 워크시트</title>
+    <title>서술형 평가</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { font-family: 'Inter', 'Pretendard', sans-serif; }
@@ -292,7 +292,7 @@
                 const button = document.createElement('button');
                 const activeClass = isAdminMode ? 'admin-active' : 'student-active';
                 button.className = `tab-button py-3 px-5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300`;
-                button.textContent = q.title;
+                button.textContent = isAdminMode ? `[선생님] ${q.title}` : q.title;
                 if (q.id === activeQuestionId) button.classList.add(activeClass);
                 button.addEventListener('click', () => {
                     activeQuestionId = q.id;
@@ -369,7 +369,6 @@
 
             const mySubmission = submissions[activeQuestionId]?.[currentStudentIdentifier];
             
-            // ✅ 오류 수정: lastAttempt가 null/undefined일 때 발생하는 오류를 막기 위해 안정성 강화
             const lastAttempt = mySubmission && Array.isArray(mySubmission.attempts) && mySubmission.attempts.length > 0
                 ? mySubmission.attempts[mySubmission.attempts.length - 1]
                 : null;
