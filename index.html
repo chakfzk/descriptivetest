@@ -110,7 +110,7 @@
             appId: "1:579662407313:web:dfabcd3b0f126df698c130",
             measurementId: "G-5PHJ2RZ4FJ"
         };
-        const firestoreAppId = firebaseConfig.projectId; 
+        const firestoreAppId = firebaseConfig.projectId; // ✅ 3번 문제 해결: 고유 ID 사용
         
         const apiKey = "AIzaSyAV3I5XBosjZKy4dcBhsLSdVOYDGqvQOPY";
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
@@ -143,6 +143,7 @@
                 if (isAdminMode) {
                     setupAdminView();
                 } else {
+                    // ✅ 1번 문제 해결: 저장된 로그인 정보 확인
                     const savedStudentId = localStorage.getItem('worksheetStudentId');
                     const savedStudentName = localStorage.getItem('worksheetStudentName');
                     if (savedStudentId && savedStudentName) {
@@ -165,7 +166,7 @@
                         resolve(user);
                     } else {
                         try {
-                            // ✅ 오류 수정: 외부 배포 환경에서는 항상 익명 로그인을 사용하도록 변경
+                            // ✅ 인증 오류 수정: 항상 익명 로그인을 사용하도록 변경
                             const userCredential = await signInAnonymously(auth);
                             userId = userCredential.user.uid;
                             resolve(userCredential.user);
@@ -207,6 +208,7 @@
                     alert('학번과 이름을 모두 입력해주세요.');
                     return;
                 }
+                // ✅ 1번 문제 해결: 로그인 정보 저장
                 localStorage.setItem('worksheetStudentId', studentId);
                 localStorage.setItem('worksheetStudentName', studentName);
                 handleStudentLogin(studentId, studentName);
@@ -229,6 +231,7 @@
         }
 
         function logout() {
+            // ✅ 1번 문제 해결: 저장된 로그인 정보 삭제
             localStorage.removeItem('worksheetStudentId');
             localStorage.removeItem('worksheetStudentName');
 
