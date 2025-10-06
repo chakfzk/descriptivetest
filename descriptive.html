@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>양방향 학습 워크시트</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', 'Pretendard', sans-serif; }
+        .tab-button { transition: all 0.3s ease-in-out; }
+        .tab-button.admin-active {
+            border-color: #4f46e5; background-color: #eef2ff; color: #4338ca; font-weight: 600;
+        }
+        .tab-button.student-active {
+            border-color: #0d9488; background-color: #f0fdfa; color: #0f766e; font-weight: 600;
+        }
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.5); transition: opacity 0.3s ease-in-out; }
+        .modal-content { transition: transform 0.3s ease-in-out; }
+        .scale-in { animation: scaleIn 0.3s ease-in-out; }
+        @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .spinner {
+            animation: spin 1s linear infinite;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div id="app-container" class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- 학생 정보 입력 화면 -->
+        <div id="student-login-view" class="hidden flex-col items-center justify-center min-h-screen">
+             <div class="w-full max-w-md p-8 bg-white rounded-2xl shadow-lg text-center">
+                <h1 class="text-2xl font-bold text-gray-900 mb-6">학습을 시작합니다</h1>
+                <p class="text-gray-500 mb-6">학번과 이름을 입력해주세요.</p>
+                <div class="space-y-4">
+                    <input type="text" id="student-id-input" placeholder="학번 (예: 202501)" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    <input type="text" id="student-name-input" placeholder="이름 (예: 홍길동)" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500">
+                </div>
+                <button id="start-learning-btn" class="mt-6 w-full bg-teal-500 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-teal-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-400 transition-transform transform hover:scale-105">
+                    학습 시작하기
+                </button>
+            </div>
+        </div>
+
+        <!-- 메인 콘텐츠 뷰 (학생/관리자 공통) -->
+        <div id="main-view" class="hidden">
+            <header class="flex justify-between items-center mb-6 pb-4 border-b">
+                <div>
+                    <h1 id="view-title" class="text-3xl font-bold text-gray-900"></h1>
+                    <p id="user-info" class="text-gray-500 mt-1"></p>
+                </div>
+                <div id="main-controls"></div>
+            </header>
+            <div id="tabs-container" class="flex items-center border-b border-gray-200 mb-6 flex-wrap"></div>
+            <div id="content-container" class="bg-white p-6 rounded-2xl shadow-md min-h-[500px]"></div>
+        </div>
+    </div>
+    
+    <!-- 문제 추가/수정 모달 (관리자용) -->
+    <div id="question-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="modal-backdrop fixed inset-0"></div>
+        <div class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-8 relative scale-in">
+            <h2 id="modal-title" class="text-2xl font-bold mb-6"></h2>
+            <form id="question-form">
+                <input type="hidden" id="question-id-input">
+                <div class="mb-4">
+                    <label for="question-title-input" class="block text-sm font-medium text-gray-700 mb-1">문제 제목</label>
+                    <input type="text" id="question-title-input" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                </div>
+                <div class="mb-6">
+                    <label for="question-text-input" class="block text-sm font-medium text-gray-700 mb-1">문제 내용</label>
+                    <textarea id="question-text-input" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" required></textarea>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-3">채점 기준 (루브릭)</h3>
+                    <div id="rubric-container" class="space-y-3"></div>
+                    <button type="button" id="add-rubric-item-btn" class="mt-4 text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center">
+                        <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                        항목 추가
+                    </button>
+                </div>
+                <div class="mt-8 flex justify-end space-x-3">
+                    <button type="button" id="close-modal-btn" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">취소</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- 전역 변수 ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-interactive-worksheet';
+const firebaseConfig = {
+  apiKey: "AIzaSyBdUoeofhygGywljSXo6poTKGwaHvjYmbw",
+  authDomain: "descriptive-test-ce7fc.firebaseapp.com",
+  projectId: "descriptive-test-ce7fc",
+  storageBucket: "descriptive-test-ce7fc.firebasestorage.app",
+  messagingSenderId: "579662407313",
+  appId: "1:579662407313:web:dfabcd3b0f126df698c130",
+  measurementId: "G-5PHJ2RZ4FJ"
+};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        const apiKey = ""; // API 키는 Canvas 환경에서 자동으로 제공됩니다.
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+        let app, auth, db, userId, isAdminMode;
+        let questions = [], submissions = {};
+        let activeQuestionId = null;
+        let currentStudentIdentifier = null;
+        let unsubscribeQuestions = null;
+        let unsubscribeSubmissions = {};
+
+        // --- UI 요소 ---
+        const studentLoginView = document.getElementById('student-login-view');
+        const mainView = document.getElementById('main-view');
+        const contentContainer = document.getElementById('content-container');
+        const tabsContainer = document.getElementById('tabs-container');
+        const questionModal = document.getElementById('question-modal');
+
+        // --- 초기화 ---
+        async function initialize() {
+            const urlParams = new URLSearchParams(window.location.search);
+            isAdminMode = urlParams.get('admin') === 'true';
+
+            if (Object.keys(firebaseConfig).length === 0) {
+                 console.error("Firebase 설정이 없습니다.");
+                 document.body.innerHTML = `<p class="text-red-500 text-center mt-10">오류: Firebase 설정이 없습니다.</p>`;
+                 return;
+            }
+
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                await authenticateUser();
+                
+                if (isAdminMode) {
+                    setupAdminView();
+                } else {
+                    setupStudentView();
+                }
+            } catch (error) {
+                console.error("Firebase 초기화 오류:", error);
+                document.body.innerHTML = `<p class="text-red-500 text-center mt-10">오류: Firebase에 연결할 수 없습니다.</p>`;
+            }
+        }
+
+        async function authenticateUser() {
+             return new Promise((resolve) => {
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        resolve(user);
+                    } else {
+                        try {
+                            const userCredential = initialAuthToken ? await signInWithCustomToken(auth, initialAuthToken) : await signInAnonymously(auth);
+                            userId = userCredential.user.uid;
+                            resolve(userCredential.user);
+                        } catch (error) {
+                            console.error("인증 오류:", error); resolve(null);
+                        }
+                    }
+                });
+            });
+        }
+
+        // --- 뷰 설정 ---
+        function setupAdminView() {
+            studentLoginView.classList.add('hidden');
+            mainView.classList.remove('hidden');
+
+            document.getElementById('view-title').textContent = '선생님 대시보드';
+            document.getElementById('user-info').textContent = '문제를 관리하고 학생들의 답변을 채점하세요.';
+            document.getElementById('main-controls').innerHTML = `<button id="add-question-btn" class="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-105">새 문제 추가</button>`;
+            
+            document.getElementById('add-question-btn').addEventListener('click', openQuestionModalForCreate);
+            document.getElementById('question-form').addEventListener('submit', handleQuestionFormSubmit);
+            document.getElementById('add-rubric-item-btn').addEventListener('click', () => addRubricItem());
+            document.getElementById('close-modal-btn').addEventListener('click', closeQuestionModal);
+            questionModal.querySelector('.modal-backdrop').addEventListener('click', closeQuestionModal);
+
+            loadData();
+        }
+
+        function setupStudentView() {
+            studentLoginView.classList.add('flex');
+            studentLoginView.classList.remove('hidden');
+            mainView.classList.add('hidden');
+            
+            document.getElementById('start-learning-btn').addEventListener('click', startLearning);
+            document.getElementById('main-controls').innerHTML = `<button id="logout-btn" class="text-sm text-gray-600 hover:text-teal-700 font-medium">다른 계정으로 시작</button>`;
+            document.getElementById('logout-btn').addEventListener('click', logout);
+        }
+
+        function startLearning() {
+            const studentId = document.getElementById('student-id-input').value.trim();
+            const studentName = document.getElementById('student-name-input').value.trim();
+
+            if (!studentId || !studentName) {
+                alert('학번과 이름을 모두 입력해주세요.');
+                return;
+            }
+            currentStudentIdentifier = `${studentId}_${studentName}`;
+            
+            studentLoginView.classList.remove('flex');
+            studentLoginView.classList.add('hidden');
+            mainView.classList.remove('hidden');
+
+            document.getElementById('view-title').textContent = '나의 학습';
+            document.getElementById('user-info').textContent = `${studentId} ${studentName} 학생`;
+            
+            loadData();
+        }
+
+        function logout() {
+            mainView.classList.add('hidden');
+            studentLoginView.classList.remove('hidden');
+            studentLoginView.classList.add('flex');
+            currentStudentIdentifier = null;
+            
+            if (unsubscribeQuestions) unsubscribeQuestions();
+            Object.values(unsubscribeSubmissions).forEach(unsub => unsub());
+            unsubscribeSubmissions = {};
+            questions = [];
+            submissions = {};
+            activeQuestionId = null;
+            tabsContainer.innerHTML = '';
+            contentContainer.innerHTML = '';
+        }
+
+        // --- 데이터 로딩 및 구독 ---
+        function loadData() {
+            const questionsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions');
+            if (unsubscribeQuestions) unsubscribeQuestions();
+            unsubscribeQuestions = onSnapshot(questionsColRef, (snapshot) => {
+                questions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                questions.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+                
+                if (questions.length > 0 && (!activeQuestionId || !questions.some(q => q.id === activeQuestionId))) {
+                    activeQuestionId = questions[0]?.id || null;
+                } else if (questions.length === 0) {
+                    activeQuestionId = null;
+                }
+                
+                renderTabs();
+                renderContent();
+                questions.forEach(q => listenForSubmissions(q.id));
+            });
+        }
+
+        function listenForSubmissions(questionId) {
+            const colPath = collection(db, 'artifacts', appId, 'public', 'data', 'questions', questionId, 'submissions');
+            if (unsubscribeSubmissions[questionId]) unsubscribeSubmissions[questionId]();
+            
+            unsubscribeSubmissions[questionId] = onSnapshot(colPath, (snapshot) => {
+                submissions[questionId] = submissions[questionId] || {};
+                const currentSubs = {};
+                snapshot.docs.forEach(doc => {
+                    currentSubs[doc.id] = { id: doc.id, ...doc.data() };
+                });
+                submissions[questionId] = currentSubs;
+                if (activeQuestionId === questionId) renderContent();
+            });
+        }
+
+        // --- UI 렌더링 ---
+        function renderTabs() {
+            tabsContainer.innerHTML = '';
+            if (questions.length === 0) return;
+            questions.forEach(q => {
+                const button = document.createElement('button');
+                const activeClass = isAdminMode ? 'admin-active' : 'student-active';
+                button.className = `tab-button py-3 px-5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300`;
+                button.textContent = q.title;
+                if (q.id === activeQuestionId) button.classList.add(activeClass);
+                button.addEventListener('click', () => {
+                    activeQuestionId = q.id;
+                    renderTabs();
+                    renderContent();
+                });
+                tabsContainer.appendChild(button);
+            });
+        }
+
+        function renderContent() {
+            if (isAdminMode) renderAdminContent();
+            else renderStudentContent();
+        }
+
+        function renderAdminContent() {
+            if (!activeQuestionId) {
+                contentContainer.innerHTML = `<div class="text-center py-20"><h2 class="text-xl font-semibold text-gray-700">문제를 추가하여 수업을 시작하세요.</h2><p class="text-gray-500 mt-2">우측 상단의 '새 문제 추가' 버튼을 클릭하세요.</p></div>`;
+                return;
+            }
+            const question = questions.find(q => q.id === activeQuestionId);
+            if (!question) return;
+
+            const questionSubmissions = submissions[activeQuestionId] || {};
+            const hasSubmissions = Object.values(questionSubmissions).length > 0;
+
+            const submissionListHTML = hasSubmissions
+                ? `<ul class="space-y-3">${Object.values(questionSubmissions).sort((a,b) => a.studentIdentifier.localeCompare(b.studentIdentifier)).map(sub => {
+                    const lastAttempt = sub.attempts[sub.attempts.length - 1];
+                    const isGraded = lastAttempt.scores !== null;
+                    const totalScore = isGraded ? Object.values(lastAttempt.scores).reduce((a, b) => a + b, 0) : 0;
+                    const maxScore = question.rubric.reduce((a, b) => a + b.maxScore, 0);
+                    const isPerfect = isGraded && totalScore === maxScore;
+                    let statusBadge = isPerfect ? `<span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">만점</span>`
+                        : isGraded ? `<span class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">채점 완료</span>`
+                        : `<span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">채점 대기중</span>`;
+                    return `<li class="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer" onclick="window.gradeSubmission('${question.id}', '${sub.id}')">
+                        <div class="flex justify-between items-center"><span class="font-semibold">${sub.studentIdentifier.replace('_', ' ')}</span><div>${statusBadge}<span class="text-sm text-gray-500 ml-2">${sub.attempts.length}회 제출</span></div></div></li>`;
+                }).join('')}</ul>`
+                : `<p class="text-center text-gray-500 py-10">아직 제출된 답변이 없습니다.</p>`;
+            
+            const downloadButtonHTML = hasSubmissions 
+                ? `<button onclick="window.downloadSubmissionsAsCSV('${question.id}')" class="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 text-sm flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+                    CSV 다운로드 및 데이터 삭제
+                   </button>` 
+                : '';
+
+            contentContainer.innerHTML = `
+                <div class="flex justify-between items-start mb-6"><div><h2 class="text-2xl font-bold">${question.title}</h2><p class="mt-2 text-gray-600 whitespace-pre-wrap">${question.questionText}</p></div><div class="flex space-x-2"><button onclick="window.openQuestionModalForEdit('${question.id}')" class="text-sm text-indigo-600 hover:text-indigo-800">수정</button><button onclick="window.deleteQuestion('${question.id}')" class="text-sm text-red-600 hover:text-red-800">삭제</button></div></div>
+                <div class="mb-6"><h3 class="font-semibold mb-2">채점 기준</h3><ul class="list-disc list-inside space-y-1 text-gray-700">${question.rubric.map(r => `<li>${r.criterion} (${r.maxScore}점)</li>`).join('')}</ul></div>
+                <div>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-semibold">학생 제출 현황</h3>
+                        ${downloadButtonHTML}
+                    </div>
+                    ${submissionListHTML}
+                </div>`;
+        }
+
+        function renderStudentContent() {
+             if (!activeQuestionId) {
+                contentContainer.innerHTML = `<div class="text-center py-20"><h2 class="text-xl font-semibold text-gray-700">아직 등록된 문제가 없습니다.</h2><p class="text-gray-500 mt-2">선생님이 문제를 등록하면 여기에 표시됩니다.</p></div>`;
+                return;
+            }
+            const question = questions.find(q => q.id === activeQuestionId);
+            if (!question) return;
+
+            const mySubmission = submissions[activeQuestionId]?.[currentStudentIdentifier];
+            const lastAttempt = mySubmission ? mySubmission.attempts[mySubmission.attempts.length - 1] : null;
+            const isGraded = lastAttempt?.scores !== null;
+            const needsSubmission = !lastAttempt || isGraded;
+            const maxScore = question.rubric.reduce((a, b) => a + b.maxScore, 0);
+            const totalScore = isGraded ? Object.values(lastAttempt.scores).reduce((a, b) => a + b, 0) : 0;
+            const isPerfect = isGraded && totalScore === maxScore;
+
+            let historyHTML = '';
+            if (mySubmission) {
+                historyHTML = `<h3 class="text-xl font-semibold mt-10 mb-4">나의 제출 기록</h3><div class="space-y-6">${mySubmission.attempts.map((attempt, index) => {
+                    const attemptTotalScore = attempt.scores ? Object.values(attempt.scores).reduce((a, b) => a + b, 0) : 0;
+                    const feedbackDisplay = attempt.scores 
+                        ? `<div class="border-t pt-4 mt-4">
+                             <h4 class="font-semibold mb-2">AI 피드백</h4>
+                             <div class="bg-yellow-50 p-3 rounded-md mb-3"><p class="text-gray-700 whitespace-pre-wrap">${attempt.feedback || '피드백이 없습니다.'}</p></div>
+                             <div class="flex items-center space-x-4 flex-wrap">${Object.entries(attempt.scores).map(([crit, score]) => `<div class="text-sm"><span class="font-medium">${crit}:</span> ${score}점</div>`).join('')}
+                                <div class="font-bold text-indigo-600">총점: ${attemptTotalScore} / ${maxScore}점</div>
+                             </div>
+                           </div>` 
+                        : `<p class="text-blue-600 font-medium flex items-center"><span class="spinner !w-4 !h-4 !border-2 mr-2"></span> ${attempt.feedback || 'AI가 채점 중입니다...'}</p>`;
+
+                    return `<div class="border rounded-lg p-4 bg-gray-50">
+                                <p class="text-sm font-semibold text-gray-500 mb-2">${mySubmission.attempts.length - index}번째 제출</p>
+                                <p class="text-gray-800 whitespace-pre-wrap mb-4">${attempt.answer}</p>
+                                ${feedbackDisplay}
+                            </div>`;
+                }).reverse().join('')}</div>`;
+            }
+
+            const submissionFormHTML = isPerfect
+                ? `<div class="text-center p-6 bg-green-100 rounded-lg"><h3 class="text-2xl font-bold text-green-800">🎉 만점입니다! 🎉</h3><p class="text-green-700 mt-2">정말 잘했어요! 다음 문제에 도전해보세요.</p></div>`
+                : `<h3 class="text-xl font-semibold mb-4">${lastAttempt && isGraded ? '답변 수정하기' : '답변 작성하기'}</h3>
+                   <textarea id="student-answer-textarea" class="w-full h-40 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="여기에 답변을 입력하세요..." ${!needsSubmission ? 'disabled' : ''}>${lastAttempt && isGraded ? lastAttempt.answer : ''}</textarea>
+                   <button id="submit-answer-btn" class="mt-4 w-full bg-teal-500 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-teal-600 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center" ${!needsSubmission ? 'disabled' : ''}>
+                       ${!needsSubmission ? 'AI가 채점 중입니다...' : '제출하기'}
+                   </button>`;
+
+            contentContainer.innerHTML = `<h2 class="text-2xl font-bold">${question.title}</h2><p class="mt-2 mb-6 text-gray-600 whitespace-pre-wrap">${question.questionText}</p><div class="mb-8 p-4 bg-teal-50 rounded-lg"><h3 class="font-semibold mb-2 text-teal-800">채점 기준</h3><ul class="list-disc list-inside space-y-1 text-teal-700">${question.rubric.map(r => `<li>${r.criterion} (${r.maxScore}점)</li>`).join('')}</ul></div>${submissionFormHTML}${historyHTML}`;
+
+            if (!isPerfect) {
+                document.getElementById('submit-answer-btn')?.addEventListener('click', submitAnswer);
+            }
+        }
+
+        // --- 데이터 처리 함수 ---
+        // 학생
+        async function submitAnswer() {
+            const answer = document.getElementById('student-answer-textarea').value.trim();
+            if (!answer) { alert('답변을 입력해주세요.'); return; }
+
+            const submitButton = document.getElementById('submit-answer-btn');
+            submitButton.disabled = true;
+            submitButton.innerHTML = `<div class="spinner"></div> AI가 채점 중입니다...`;
+
+            const question = questions.find(q => q.id === activeQuestionId);
+
+            try {
+                const aiResult = await generateAIFeedbackForStudent(question, answer);
+                const newAttempt = { answer, scores: aiResult.scores, feedback: aiResult.feedback, timestamp: new Date() };
+                
+                const submissionRef = doc(db, 'artifacts', appId, 'public', 'data', 'questions', activeQuestionId, 'submissions', currentStudentIdentifier);
+                await setDoc(submissionRef, { studentIdentifier: currentStudentIdentifier, attempts: arrayUnion(newAttempt) }, { merge: true });
+            } catch (error) {
+                console.error("AI 피드백 생성 또는 답변 제출 오류:", error);
+                alert("AI 채점 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+                
+                const newAttemptWithError = { answer, scores: null, feedback: "AI 채점 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 선생님께 문의하세요.", timestamp: new Date() };
+                const submissionRef = doc(db, 'artifacts', appId, 'public', 'data', 'questions', activeQuestionId, 'submissions', currentStudentIdentifier);
+                try {
+                     await setDoc(submissionRef, { studentIdentifier: currentStudentIdentifier, attempts: arrayUnion(newAttemptWithError) }, { merge: true });
+                } catch (dbError) {
+                    console.error("오류 답변 저장 실패:", dbError);
+                    submitButton.disabled = false;
+                    submitButton.textContent = '제출하기';
+                }
+            }
+        }
+
+        async function generateAIFeedbackForStudent(question, studentAnswer) {
+             const rubricString = question.rubric.map(r => `- ${r.criterion} (${r.maxScore}점)`).join('\n');
+            
+            const systemPrompt = "당신은 학생들의 서술형 답안을 채점하고 건설적인 피드백을 제공하는 유능하고 친절한 AI 선생님입니다. 제시된 채점 기준(루브릭)에 따라 학생의 답변을 엄격하고 객관적으로 평가해주세요. 학생이 더 발전할 수 있도록 긍정적이고 구체적인 조언을 담아 피드백을 작성해야 합니다.";
+
+            const userQuery = `다음은 학생이 서술형 문제에 대해 제출한 답변입니다. 채점 기준에 따라 각 항목별 점수를 매기고, 종합 피드백을 작성해주세요.
+            
+            ### 문제
+            ${question.questionText}
+
+            ### 학생 답변
+            ${studentAnswer}
+
+            ### 채점 기준 (루브릭)
+            ${rubricString}
+
+            ### 출력 형식
+            반드시 아래 JSON 형식에 맞춰서, 각 채점 기준 항목마다 점수를 할당하고, 종합 피드백을 한국어로 작성해주세요. 점수는 최대 점수를 초과할 수 없습니다.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            scores: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: { criterion: { type: "STRING" }, score: { type: "NUMBER" } },
+                                    required: ["criterion", "score"]
+                                }
+                            },
+                            feedback: { type: "STRING" }
+                        },
+                        required: ["scores", "feedback"]
+                    }
+                }
+            };
+            
+            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (!response.ok) throw new Error(`API 요청 실패: ${response.statusText}`);
+
+            const result = await response.json();
+            const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (aiResponseText) {
+                const aiData = JSON.parse(aiResponseText);
+                const scoresObject = {};
+                aiData.scores.forEach(item => {
+                    const rubricItem = question.rubric.find(r => r.criterion === item.criterion);
+                    if (rubricItem) {
+                        scoresObject[item.criterion] = Math.min(item.score, rubricItem.maxScore);
+                    }
+                });
+                return { scores: scoresObject, feedback: aiData.feedback };
+            } else {
+                 throw new Error("AI로부터 유효한 응답을 받지 못했습니다.");
+            }
+        }
+
+        // 관리자
+        async function handleQuestionFormSubmit(e) {
+            e.preventDefault();
+            const id = document.getElementById('question-id-input').value;
+            const rubricItems = document.querySelectorAll('.rubric-item');
+            const rubric = Array.from(rubricItems).map(item => ({ criterion: item.querySelector('.rubric-criterion').value, maxScore: parseInt(item.querySelector('.rubric-score').value, 10) }));
+            if (rubric.some(r => !r.criterion || isNaN(r.maxScore))) { alert('모든 채점 기준의 내용과 점수를 입력해주세요.'); return; }
+            const questionData = { title: document.getElementById('question-title-input').value, questionText: document.getElementById('question-text-input').value, rubric };
+            const questionId = id || Date.now().toString();
+            if (!id) questionData.createdAt = new Date();
+            const questionRef = doc(db, 'artifacts', appId, 'public', 'data', 'questions', questionId);
+            await setDoc(questionRef, questionData, { merge: true });
+            if (!id) activeQuestionId = questionId;
+            closeQuestionModal();
+        }
+        
+        window.gradeSubmission = (questionId, studentId) => {
+            const question = questions.find(q => q.id === questionId);
+            const submission = submissions[questionId]?.[studentId];
+            if (!question || !submission) return;
+            const lastAttempt = submission.attempts[submission.attempts.length - 1];
+            const modalId = `grading-modal-${studentId}`;
+            document.getElementById(modalId)?.remove();
+
+            const modalContent = `<div class="fixed inset-0 z-50 flex items-center justify-center p-4" id="${modalId}">
+                <div class="modal-backdrop fixed inset-0 bg-black bg-opacity-50"></div>
+                <div class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-8 relative scale-in">
+                    <h2 class="text-2xl font-bold mb-4">"${submission.studentIdentifier.replace('_',' ')}" 학생 채점 (AI 결과 검토)</h2>
+                    <div class="mb-6 p-4 bg-gray-50 rounded-lg"><p class="font-semibold text-gray-500 mb-2">학생 답변</p><p class="text-gray-800 whitespace-pre-wrap">${lastAttempt.answer}</p></div>
+                    <form id="grading-form-${studentId}">
+                        <div class="space-y-4 mb-6">${question.rubric.map(r => `<div><label class="block text-sm font-medium text-gray-700">${r.criterion} (최대 ${r.maxScore}점)</label><input type="number" class="grading-score mt-1 w-full px-3 py-2 border rounded-lg" data-criterion="${r.criterion}" min="0" max="${r.maxScore}" required></div>`).join('')}</div>
+                        <div class="mb-6"><label class="block text-sm font-medium text-gray-700 mb-1">종합 피드백</label><textarea id="grading-feedback-${studentId}" rows="4" class="mt-1 w-full px-3 py-2 border rounded-lg" required></textarea></div>
+                        <div class="flex justify-end space-x-3"><button type="button" class="px-4 py-2 bg-gray-200 rounded-lg" onclick="document.getElementById('${modalId}').remove()">취소</button><button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">수정 완료</button></div>
+                    </form>
+                </div>
+            </div>`;
+            document.body.insertAdjacentHTML('beforeend', modalContent);
+            
+            // AI가 채점한 결과 미리 채워넣기
+            if (lastAttempt.scores) {
+                Object.entries(lastAttempt.scores).forEach(([criterion, score]) => {
+                    const scoreInput = document.querySelector(`#grading-form-${studentId} .grading-score[data-criterion="${criterion}"]`);
+                    if (scoreInput) scoreInput.value = score;
+                });
+            }
+            if (lastAttempt.feedback) {
+                document.getElementById(`grading-feedback-${studentId}`).value = lastAttempt.feedback;
+            }
+
+            document.getElementById(modalId).querySelector('.modal-backdrop').addEventListener('click', () => document.getElementById(modalId).remove());
+            document.getElementById(`grading-form-${studentId}`).addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const scores = {};
+                e.target.querySelectorAll('.grading-score').forEach(input => { scores[input.dataset.criterion] = parseInt(input.value, 10); });
+                const feedback = e.target.querySelector(`#grading-feedback-${studentId}`).value;
+                const updatedAttempts = [...submission.attempts];
+                updatedAttempts[updatedAttempts.length - 1] = { ...lastAttempt, scores, feedback };
+                const submissionRef = doc(db, 'artifacts', appId, 'public', 'data', 'questions', questionId, 'submissions', studentId);
+                await updateDoc(submissionRef, { attempts: updatedAttempts });
+                document.getElementById(modalId).remove();
+            });
+        };
+
+        window.downloadSubmissionsAsCSV = (questionId) => {
+            const question = questions.find(q => q.id === questionId);
+            const subs = submissions[questionId];
+            if (!question || !subs) {
+                alert("다운로드할 데이터가 없습니다.");
+                return;
+            }
+
+            let csvContent = "\uFEFF"; // 한글 깨짐 방지 (BOM)
+
+            const headers = ['학번', '이름', '제출 횟수', '최종 답변', ...question.rubric.map(r => `${r.criterion} (점수)`), '총점', '최종 피드백'];
+            csvContent += headers.join(',') + '\r\n';
+
+            for (const sub of Object.values(subs)) {
+                const lastAttempt = sub.attempts[sub.attempts.length - 1];
+                if (!lastAttempt) continue;
+
+                const [studentId, studentName] = sub.studentIdentifier.split('_');
+                const submissionCount = sub.attempts.length;
+                const finalAnswer = `"${lastAttempt.answer?.replace(/"/g, '""') || ''}"`;
+                
+                const scores = question.rubric.map(r => lastAttempt.scores?.[r.criterion] ?? '미채점');
+                const totalScore = scores.reduce((acc, score) => acc + (isNaN(score) ? 0 : Number(score)), 0);
+                const finalFeedback = `"${lastAttempt.feedback?.replace(/"/g, '""') || ''}"`;
+                
+                const row = [studentId, studentName, submissionCount, finalAnswer, ...scores, totalScore, finalFeedback];
+                csvContent += row.join(',') + '\r\n';
+            }
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            const safeTitle = question.title.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+            link.setAttribute("download", `${safeTitle}_답변_결과.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            // 데이터 삭제 로직 추가
+            setTimeout(() => {
+                if(confirm('CSV 다운로드가 완료되었습니다. 이 문제에 대한 모든 학생 데이터를 Firebase에서 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+                    const deletePromises = Object.keys(subs).map(studentId => {
+                        const subDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'questions', questionId, 'submissions', studentId);
+                        return deleteDoc(subDocRef);
+                    });
+
+                    Promise.all(deletePromises)
+                        .then(() => {
+                            alert('데이터가 성공적으로 삭제되었습니다.');
+                        })
+                        .catch(error => {
+                            console.error("데이터 삭제 중 오류 발생:", error);
+                            alert("데이터 삭제 중 오류가 발생했습니다.");
+                        });
+                }
+            }, 100);
+        };
+        
+        window.deleteQuestion = async (id) => {
+            if(confirm('정말로 이 문제를 삭제하시겠습니까? 관련된 모든 학생 데이터도 함께 삭제됩니다.')) {
+                const subsCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'questions', id, 'submissions');
+                const subsSnapshot = await getDocs(subsCollectionRef);
+                const deletePromises = subsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+                await Promise.all(deletePromises);
+                
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'questions', id));
+                
+                if (unsubscribeSubmissions[id]) { 
+                    unsubscribeSubmissions[id](); 
+                    delete unsubscribeSubmissions[id]; 
+                }
+            }
+        };
+
+        function openQuestionModalForCreate() {
+            document.getElementById('question-form').reset();
+            document.getElementById('question-id-input').value = '';
+            document.getElementById('modal-title').textContent = '새 문제 만들기';
+            document.getElementById('rubric-container').innerHTML = '';
+            addRubricItem();
+            questionModal.classList.remove('hidden');
+        }
+
+        window.openQuestionModalForEdit = (id) => {
+            const question = questions.find(q => q.id === id);
+            if(!question) return;
+            document.getElementById('question-form').reset();
+            document.getElementById('question-id-input').value = id;
+            document.getElementById('modal-title').textContent = '문제 수정하기';
+            document.getElementById('question-title-input').value = question.title;
+            document.getElementById('question-text-input').value = question.questionText;
+            const rubricContainer = document.getElementById('rubric-container');
+            rubricContainer.innerHTML = '';
+            question.rubric.forEach(r => addRubricItem(r.criterion, r.maxScore));
+            questionModal.classList.remove('hidden');
+        }
+
+        function closeQuestionModal() { questionModal.classList.add('hidden'); }
+
+        function addRubricItem(criterion = '', score = '') {
+            const div = document.createElement('div');
+            div.className = 'rubric-item flex items-center space-x-2';
+            div.innerHTML = `<input type="text" class="rubric-criterion w-full px-3 py-2 border rounded-lg" placeholder="채점 기준 (예: 내용의 충실성)" value="${criterion}" required><input type="number" class="rubric-score w-24 px-3 py-2 border rounded-lg" placeholder="점수" value="${score}" required><button type="button" class="text-red-500 hover:text-red-700 p-1" onclick="this.parentElement.remove()"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>`;
+            document.getElementById('rubric-container').appendChild(div);
+        }
+
+        // --- 앱 시작 ---
+        initialize();
+    </script>
+</body>
+</html>
+
