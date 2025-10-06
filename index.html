@@ -110,7 +110,7 @@
             appId: "1:579662407313:web:dfabcd3b0f126df698c130",
             measurementId: "G-5PHJ2RZ4FJ"
         };
-        const firestoreAppId = firebaseConfig.projectId; // ✅ 3번 문제 해결: 고유 ID 사용
+        const firestoreAppId = firebaseConfig.projectId; 
         
         const apiKey = "AIzaSyAV3I5XBosjZKy4dcBhsLSdVOYDGqvQOPY";
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
@@ -143,7 +143,6 @@
                 if (isAdminMode) {
                     setupAdminView();
                 } else {
-                    // ✅ 1번 문제 해결: 저장된 로그인 정보 확인
                     const savedStudentId = localStorage.getItem('worksheetStudentId');
                     const savedStudentName = localStorage.getItem('worksheetStudentName');
                     if (savedStudentId && savedStudentName) {
@@ -166,7 +165,6 @@
                         resolve(user);
                     } else {
                         try {
-                            // ✅ 인증 오류 수정: 항상 익명 로그인을 사용하도록 변경
                             const userCredential = await signInAnonymously(auth);
                             userId = userCredential.user.uid;
                             resolve(userCredential.user);
@@ -208,7 +206,6 @@
                     alert('학번과 이름을 모두 입력해주세요.');
                     return;
                 }
-                // ✅ 1번 문제 해결: 로그인 정보 저장
                 localStorage.setItem('worksheetStudentId', studentId);
                 localStorage.setItem('worksheetStudentName', studentName);
                 handleStudentLogin(studentId, studentName);
@@ -231,7 +228,6 @@
         }
 
         function logout() {
-            // ✅ 1번 문제 해결: 저장된 로그인 정보 삭제
             localStorage.removeItem('worksheetStudentId');
             localStorage.removeItem('worksheetStudentName');
 
@@ -331,7 +327,8 @@
                     const lastAttempt = sub.attempts[sub.attempts.length - 1];
                     const isGraded = lastAttempt.scores !== null;
                     const totalScore = isGraded ? Object.values(lastAttempt.scores).reduce((a, b) => a + b, 0) : 0;
-                    const maxScore = question.rubric.reduce((a, b) => a + b.maxScore, 0);
+                    // ✅ 데이터 안정성 강화
+                    const maxScore = Array.isArray(question.rubric) ? question.rubric.reduce((a, b) => a + b.maxScore, 0) : 0;
                     const isPerfect = isGraded && totalScore === maxScore;
                     let statusBadge = isPerfect ? `<span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">만점</span>`
                         : isGraded ? `<span class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">채점 완료</span>`
@@ -350,7 +347,7 @@
 
             contentContainer.innerHTML = `
                 <div class="flex justify-between items-start mb-6"><div><h2 class="text-2xl font-bold">${question.title}</h2><p class="mt-2 text-gray-600 whitespace-pre-wrap">${question.questionText}</p></div><div class="flex space-x-2"><button onclick="window.openQuestionModalForEdit('${question.id}')" class="text-sm text-indigo-600 hover:text-indigo-800">수정</button><button onclick="window.deleteQuestion('${question.id}')" class="text-sm text-red-600 hover:text-red-800">삭제</button></div></div>
-                <div class="mb-6"><h3 class="font-semibold mb-2">채점 기준</h3><ul class="list-disc list-inside space-y-1 text-gray-700">${question.rubric.map(r => `<li>${r.criterion} (${r.maxScore}점)</li>`).join('')}</ul></div>
+                <div class="mb-6"><h3 class="font-semibold mb-2">채점 기준</h3><ul class="list-disc list-inside space-y-1 text-gray-700">${Array.isArray(question.rubric) ? question.rubric.map(r => `<li>${r.criterion} (${r.maxScore}점)</li>`).join('') : ''}</ul></div>
                 <div>
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-xl font-semibold">학생 제출 현황</h3>
@@ -375,9 +372,10 @@
             const lastAttempt = mySubmission ? mySubmission.attempts[mySubmission.attempts.length - 1] : null;
             const isGraded = lastAttempt?.scores !== null;
             const needsSubmission = !lastAttempt || isGraded;
-            const maxScore = question.rubric.reduce((a, b) => a + b.maxScore, 0);
+            // ✅ 데이터 안정성 강화
+            const maxScore = Array.isArray(question.rubric) ? question.rubric.reduce((a, b) => a + (b.maxScore || 0), 0) : 0;
             const totalScore = isGraded ? Object.values(lastAttempt.scores).reduce((a, b) => a + b, 0) : 0;
-            const isPerfect = isGraded && totalScore === maxScore;
+            const isPerfect = isGraded && totalScore === maxScore && maxScore > 0;
 
             let historyHTML = '';
             if (mySubmission) {
@@ -409,7 +407,7 @@
                        ${!needsSubmission ? 'AI가 채점 중입니다...' : '제출하기'}
                    </button>`;
 
-            contentContainer.innerHTML = `<h2 class="text-2xl font-bold">${question.title}</h2><p class="mt-2 mb-6 text-gray-600 whitespace-pre-wrap">${question.questionText}</p><div class="mb-8 p-4 bg-teal-50 rounded-lg"><h3 class="font-semibold mb-2 text-teal-800">채점 기준</h3><ul class="list-disc list-inside space-y-1 text-teal-700">${question.rubric.map(r => `<li>${r.criterion} (${r.maxScore}점)</li>`).join('')}</ul></div>${submissionFormHTML}${historyHTML}`;
+            contentContainer.innerHTML = `<h2 class="text-2xl font-bold">${question.title}</h2><p class="mt-2 mb-6 text-gray-600 whitespace-pre-wrap">${question.questionText}</p><div class="mb-8 p-4 bg-teal-50 rounded-lg"><h3 class="font-semibold mb-2 text-teal-800">채점 기준</h3><ul class="list-disc list-inside space-y-1 text-teal-700">${Array.isArray(question.rubric) ? question.rubric.map(r => `<li>${r.criterion} (${r.maxScore}점)</li>`).join('') : ''}</ul></div>${submissionFormHTML}${historyHTML}`;
 
             if (!isPerfect) {
                 document.getElementById('submit-answer-btn')?.addEventListener('click', submitAnswer);
@@ -451,7 +449,8 @@
         }
 
         async function generateAIFeedbackForStudent(question, studentAnswer) {
-             const rubricString = question.rubric.map(r => `- ${r.criterion} (${r.maxScore}점)`).join('\n');
+             // ✅ 데이터 안정성 강화
+             const rubricString = Array.isArray(question.rubric) ? question.rubric.map(r => `- ${r.criterion} (${r.maxScore}점)`).join('\n') : '채점 기준 없음';
             
             const systemPrompt = "당신은 학생들의 서술형 답안을 채점하고 건설적인 피드백을 제공하는 유능하고 친절한 AI 선생님입니다. 제시된 채점 기준(루브릭)에 따라 학생의 답변을 엄격하고 객관적으로 평가해주세요. 학생이 더 발전할 수 있도록 긍정적이고 구체적인 조언을 담아 피드백을 작성해야 합니다.";
 
@@ -501,12 +500,15 @@
             if (aiResponseText) {
                 const aiData = JSON.parse(aiResponseText);
                 const scoresObject = {};
-                aiData.scores.forEach(item => {
-                    const rubricItem = question.rubric.find(r => r.criterion === item.criterion);
-                    if (rubricItem) {
-                        scoresObject[item.criterion] = Math.min(item.score, rubricItem.maxScore);
-                    }
-                });
+                // ✅ 데이터 안정성 강화
+                if (Array.isArray(aiData.scores) && Array.isArray(question.rubric)) {
+                    aiData.scores.forEach(item => {
+                        const rubricItem = question.rubric.find(r => r.criterion === item.criterion);
+                        if (rubricItem) {
+                            scoresObject[item.criterion] = Math.min(item.score, rubricItem.maxScore);
+                        }
+                    });
+                }
                 return { scores: scoresObject, feedback: aiData.feedback };
             } else {
                  throw new Error("AI로부터 유효한 응답을 받지 못했습니다.");
@@ -543,7 +545,7 @@
                     <h2 class="text-2xl font-bold mb-4">"${submission.studentIdentifier.replace('_',' ')}" 학생 채점 (AI 결과 검토)</h2>
                     <div class="mb-6 p-4 bg-gray-50 rounded-lg"><p class="font-semibold text-gray-500 mb-2">학생 답변</p><p class="text-gray-800 whitespace-pre-wrap">${lastAttempt.answer}</p></div>
                     <form id="grading-form-${studentId}">
-                        <div class="space-y-4 mb-6">${question.rubric.map(r => `<div><label class="block text-sm font-medium text-gray-700">${r.criterion} (최대 ${r.maxScore}점)</label><input type="number" class="grading-score mt-1 w-full px-3 py-2 border rounded-lg" data-criterion="${r.criterion}" min="0" max="${r.maxScore}" required></div>`).join('')}</div>
+                        <div class="space-y-4 mb-6">${(Array.isArray(question.rubric) ? question.rubric : []).map(r => `<div><label class="block text-sm font-medium text-gray-700">${r.criterion} (최대 ${r.maxScore}점)</label><input type="number" class="grading-score mt-1 w-full px-3 py-2 border rounded-lg" data-criterion="${r.criterion}" min="0" max="${r.maxScore}" required></div>`).join('')}</div>
                         <div class="mb-6"><label class="block text-sm font-medium text-gray-700 mb-1">종합 피드백</label><textarea id="grading-feedback-${studentId}" rows="4" class="mt-1 w-full px-3 py-2 border rounded-lg" required></textarea></div>
                         <div class="flex justify-end space-x-3"><button type="button" class="px-4 py-2 bg-gray-200 rounded-lg" onclick="document.getElementById('${modalId}').remove()">취소</button><button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">수정 완료</button></div>
                     </form>
@@ -586,7 +588,8 @@
 
             let csvContent = "\uFEFF"; // 한글 깨짐 방지 (BOM)
 
-            const headers = ['학번', '이름', '제출 횟수', '최종 답변', ...question.rubric.map(r => `${r.criterion} (점수)`), '총점', '최종 피드백'];
+            const rubricHeaders = Array.isArray(question.rubric) ? question.rubric.map(r => `${r.criterion} (점수)`) : [];
+            const headers = ['학번', '이름', '제출 횟수', '최종 답변', ...rubricHeaders, '총점', '최종 피드백'];
             csvContent += headers.join(',') + '\r\n';
 
             for (const sub of Object.values(subs)) {
@@ -597,7 +600,7 @@
                 const submissionCount = sub.attempts.length;
                 const finalAnswer = `"${lastAttempt.answer?.replace(/"/g, '""') || ''}"`;
                 
-                const scores = question.rubric.map(r => lastAttempt.scores?.[r.criterion] ?? '미채점');
+                const scores = Array.isArray(question.rubric) ? question.rubric.map(r => lastAttempt.scores?.[r.criterion] ?? '미채점') : [];
                 const totalScore = scores.reduce((acc, score) => acc + (isNaN(score) ? 0 : Number(score)), 0);
                 const finalFeedback = `"${lastAttempt.feedback?.replace(/"/g, '""') || ''}"`;
                 
@@ -672,7 +675,9 @@
             document.getElementById('question-text-input').value = question.questionText;
             const rubricContainer = document.getElementById('rubric-container');
             rubricContainer.innerHTML = '';
-            question.rubric.forEach(r => addRubricItem(r.criterion, r.maxScore));
+            if (Array.isArray(question.rubric)) {
+                question.rubric.forEach(r => addRubricItem(r.criterion, r.maxScore));
+            }
             questionModal.classList.remove('hidden');
         }
 
@@ -690,5 +695,4 @@
     </script>
 </body>
 </html>
-
 
