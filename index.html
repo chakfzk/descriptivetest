@@ -134,9 +134,8 @@
             const urlParams = new URLSearchParams(window.location.search);
             isAdminMode = urlParams.get('admin') === 'true';
 
-            // ✅ 수정: 관리자 모드일 때 브라우저 탭 제목 변경
             if (isAdminMode) {
-                document.title = "서술형 평가 [선생님]";
+                document.title = "서술형 평가 [관리자]";
             }
 
             try {
@@ -297,7 +296,6 @@
                 const button = document.createElement('button');
                 const activeClass = isAdminMode ? 'admin-active' : 'student-active';
                 button.className = `tab-button py-3 px-5 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300`;
-                // ✅ 수정: [선생님] 표시 제거
                 button.textContent = q.title;
                 if (q.id === activeQuestionId) button.classList.add(activeClass);
                 button.addEventListener('click', () => {
@@ -388,7 +386,9 @@
 
             let historyHTML = '';
             if (mySubmission) {
-                historyHTML = `<h3 class="text-xl font-semibold mt-10 mb-4">나의 제출 기록</h3><div class="space-y-6">${mySubmission.attempts.map((attempt, index) => {
+                // ✅ 수정: 제출 기록 순서 및 번호 오류 수정
+                historyHTML = `<h3 class="text-xl font-semibold mt-10 mb-4">나의 제출 기록</h3><div class="space-y-6">${mySubmission.attempts.slice().reverse().map((attempt, index) => {
+                    const submissionNumber = mySubmission.attempts.length - index;
                     const attemptTotalScore = attempt.scores ? Object.values(attempt.scores).reduce((a, b) => a + b, 0) : 0;
                     const feedbackDisplay = attempt.scores 
                         ? `<div class="border-t pt-4 mt-4">
@@ -401,11 +401,11 @@
                         : `<p class="text-blue-600 font-medium flex items-center"><span class="spinner !w-4 !h-4 !border-2 mr-2"></span> ${attempt.feedback || 'AI가 채점 중입니다...'}</p>`;
 
                     return `<div class="border rounded-lg p-4 bg-gray-50">
-                                <p class="text-sm font-semibold text-gray-500 mb-2">${mySubmission.attempts.length - index}번째 제출</p>
+                                <p class="text-sm font-semibold text-gray-500 mb-2">${submissionNumber}번째 제출</p>
                                 <p class="text-gray-800 whitespace-pre-wrap mb-4">${attempt.answer}</p>
                                 ${feedbackDisplay}
                             </div>`;
-                }).reverse().join('')}</div>`;
+                }).join('')}</div>`;
             }
 
             const submissionFormHTML = isPerfect
