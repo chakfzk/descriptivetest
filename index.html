@@ -112,9 +112,6 @@
         };
         const firestoreAppId = firebaseConfig.projectId; 
         
-        const apiKey = "AIzaSyAV3I5XBosjZKy4dcBhsLSdVOYDGqvQOPY";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
-
         let app, auth, db, userId, isAdminMode;
         let questions = [], submissions = {};
         let activeQuestionId = null;
@@ -386,7 +383,6 @@
 
             let historyHTML = '';
             if (mySubmission) {
-                // ✅ 수정: 제출 기록 순서 및 번호 오류 수정
                 historyHTML = `<h3 class="text-xl font-semibold mt-10 mb-4">나의 제출 기록</h3><div class="space-y-6">${mySubmission.attempts.slice().reverse().map((attempt, index) => {
                     const submissionNumber = mySubmission.attempts.length - index;
                     const attemptTotalScore = attempt.scores ? Object.values(attempt.scores).reduce((a, b) => a + b, 0) : 0;
@@ -476,31 +472,21 @@
             ### 출력 형식
             반드시 아래 JSON 형식에 맞춰서, 각 채점 기준 항목마다 점수를 할당하고, 종합 피드백을 한국어로 작성해주세요. 점수는 최대 점수를 초과할 수 없습니다.`;
 
-            const payload = {
-                contents: [{ parts: [{ text: userQuery }] }],
-                systemInstruction: { parts: [{ text: systemPrompt }] },
-                generationConfig: {
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                        type: "OBJECT",
-                        properties: {
-                            scores: {
-                                type: "ARRAY",
-                                items: {
-                                    type: "OBJECT",
-                                    properties: { criterion: { type: "STRING" }, score: { type: "NUMBER" } },
-                                    required: ["criterion", "score"]
-                                }
-                            },
-                            feedback: { type: "STRING" }
-                        },
-                        required: ["scores", "feedback"]
-                    }
-                }
+            // ✅ 수정: Netlify 함수를 사용하도록 API 요청 방식 변경
+            const serverlessApiUrl = `/.netlify/functions/getAIFeedback`;
+            
+            const requestPayload = {
+                question,
+                studentAnswer
             };
             
-            const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            if (!response.ok) throw new Error(`API 요청 실패: ${response.statusText}`);
+            const response = await fetch(serverlessApiUrl, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify(requestPayload) 
+            });
+
+            if (!response.ok) throw new Error(`중개 서버 요청 실패: ${response.statusText}`);
 
             const result = await response.json();
             const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -560,7 +546,6 @@
             </div>`;
             document.body.insertAdjacentHTML('beforeend', modalContent);
             
-            // AI가 채점한 결과 미리 채워넣기
             if (lastAttempt.scores) {
                 Object.entries(lastAttempt.scores).forEach(([criterion, score]) => {
                     const scoreInput = document.querySelector(`#grading-form-${studentId} .grading-score[data-criterion="${criterion}"]`);
@@ -593,7 +578,7 @@
                 return;
             }
 
-            let csvContent = "\uFEFF"; // 한글 깨짐 방지 (BOM)
+            let csvContent = "\uFEFF"; 
 
             const rubricHeaders = Array.isArray(question.rubric) ? question.rubric.map(r => `${r.criterion} (점수)`) : [];
             const headers = ['학번', '이름', '제출 횟수', '최종 답변', ...rubricHeaders, '총점', '최종 피드백'];
@@ -627,7 +612,6 @@
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
 
-            // 데이터 삭제 로직 추가
             setTimeout(() => {
                 if(confirm('CSV 다운로드가 완료되었습니다. 이 문제에 대한 모든 학생 데이터를 Firebase에서 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
                     const deletePromises = Object.keys(subs).map(studentId => {
