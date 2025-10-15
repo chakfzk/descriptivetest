@@ -112,6 +112,10 @@
         };
         const firestoreAppId = firebaseConfig.projectId; 
         
+        // ✅ 수정: API 키와 URL을 다시 코드에 직접 포함합니다.
+        const apiKey = "AIzaSyAV3I5XBosjZKy4dcBhsLSdVOYDGqvQOPY";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
         let app, auth, db, userId, isAdminMode;
         let questions = [], submissions = {};
         let activeQuestionId = null;
@@ -453,6 +457,7 @@
             }
         }
 
+        // ✅ 수정: Netlify 함수 대신 Google AI로 직접 요청하도록 복원
         async function generateAIFeedbackForStudent(question, studentAnswer) {
              const rubricString = Array.isArray(question.rubric) ? question.rubric.map(r => `- ${r.criterion} (${r.maxScore}점)`).join('\n') : '채점 기준 없음';
             
@@ -472,21 +477,36 @@
             ### 출력 형식
             반드시 아래 JSON 형식에 맞춰서, 각 채점 기준 항목마다 점수를 할당하고, 종합 피드백을 한국어로 작성해주세요. 점수는 최대 점수를 초과할 수 없습니다.`;
 
-            // ✅ 수정: Netlify 함수를 사용하도록 API 요청 방식 변경
-            const serverlessApiUrl = `/.netlify/functions/getAIFeedback`;
-            
-            const requestPayload = {
-                question,
-                studentAnswer
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            scores: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: { criterion: { type: "STRING" }, score: { type: "NUMBER" } },
+                                    required: ["criterion", "score"]
+                                }
+                            },
+                            feedback: { type: "STRING" }
+                        },
+                        required: ["scores", "feedback"]
+                    }
+                }
             };
             
-            const response = await fetch(serverlessApiUrl, { 
+            const response = await fetch(apiUrl, { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify(requestPayload) 
+                body: JSON.stringify(payload) 
             });
 
-            if (!response.ok) throw new Error(`중개 서버 요청 실패: ${response.statusText}`);
+            if (!response.ok) throw new Error(`API 요청 실패: ${response.statusText}`);
 
             const result = await response.json();
             const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
