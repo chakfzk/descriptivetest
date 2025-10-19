@@ -52,7 +52,7 @@
             </div>
         </div>
         
-        <!-- ✅ 문제 선택 화면 (학생용) -->
+        <!-- 문제 선택 화면 (학생용) -->
         <div id="question-selection-view" class="hidden">
             <header class="flex justify-between items-center mb-6 pb-4 border-b">
                 <div>
@@ -300,14 +300,12 @@
             if (unsubscribeSubmissions[questionId]) unsubscribeSubmissions[questionId]();
             
             unsubscribeSubmissions[questionId] = onSnapshot(colPath, (snapshot) => {
-                submissions[questionId] = submissions[questionId] || {};
                 const currentSubs = {};
                 snapshot.docs.forEach(doc => {
                     currentSubs[doc.id] = { id: doc.id, ...doc.data() };
                 });
                 submissions[questionId] = currentSubs;
                 if (activeQuestionId === questionId) {
-                     // ✅ 1번 문제 해결: 전체를 다시 그리지 않고, 기록 부분만 업데이트
                     if(!isAdminMode) {
                         renderSubmissionHistory();
                     } else {
@@ -351,24 +349,69 @@
                 button.textContent = q.title;
                 if (q.id === activeQuestionId) button.classList.add(activeClass);
                 button.addEventListener('click', () => {
+                    const currentDraft = document.getElementById('student-answer-textarea')?.value || '';
                     activeQuestionId = q.id;
                     renderTabs();
-                    renderContent();
+                    renderContent(currentDraft);
                 });
                 tabsContainer.appendChild(button);
             });
         }
 
-        function renderContent() {
+        function renderContent(draftToPreserve = '') {
             if (isAdminMode) renderAdminContent();
-            else renderStudentContent();
+            else renderStudentContent(draftToPreserve);
         }
 
         function renderAdminContent() {
-            // ... (기존과 동일, 변경 없음)
+            if (!activeQuestionId) {
+                contentContainer.innerHTML = `<div class="text-center py-20"><h2 class="text-xl font-semibold text-gray-700">문제를 추가하여 수업을 시작하세요.</h2><p class="text-gray-500 mt-2">우측 상단의 '새 문제 추가' 버튼을 클릭하세요.</p></div>`;
+                return;
+            }
+            const question = questions.find(q => q.id === activeQuestionId);
+            if (!question) {
+                 contentContainer.innerHTML = `<div class="text-center py-20"><h2 class="text-xl font-semibold text-gray-700">문제를 불러오는 중입니다...</h2></div>`;
+                 return;
+            }
+
+            const questionSubmissions = submissions[activeQuestionId] || {};
+            const hasSubmissions = Object.values(questionSubmissions).length > 0;
+
+            const submissionListHTML = hasSubmissions
+                ? `<ul class="space-y-3">${Object.values(questionSubmissions).sort((a,b) => a.studentIdentifier.localeCompare(b.studentIdentifier)).map(sub => {
+                    const lastAttempt = sub.attempts[sub.attempts.length - 1];
+                    const isGraded = lastAttempt && lastAttempt.scores !== null;
+                    const totalScore = isGraded ? Object.values(lastAttempt.scores).reduce((a, b) => a + b, 0) : 0;
+                    const maxScore = Array.isArray(question.rubric) ? question.rubric.reduce((a, b) => a + (b.maxScore || 0), 0) : 0;
+                    const isPerfect = isGraded && totalScore === maxScore && maxScore > 0;
+                    let statusBadge = isPerfect ? `<span class="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">만점</span>`
+                        : isGraded ? `<span class="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">채점 완료</span>`
+                        : `<span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">채점 대기중</span>`;
+                    return `<li class="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer" onclick="window.gradeSubmission('${question.id}', '${sub.id}')">
+                        <div class="flex justify-between items-center"><span class="font-semibold">${sub.studentIdentifier.replace('_', ' ')}</span><div>${statusBadge}<span class="text-sm text-gray-500 ml-2">${sub.attempts.length}회 제출</span></div></div></li>`;
+                }).join('')}</ul>`
+                : `<p class="text-center text-gray-500 py-10">아직 제출된 답변이 없습니다.</p>`;
+            
+            const downloadButtonHTML = hasSubmissions 
+                ? `<button onclick="window.downloadSubmissionsAsCSV('${question.id}')" class="bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-700 text-sm flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+                    CSV 다운로드 및 데이터 삭제
+                   </button>` 
+                : '';
+
+            contentContainer.innerHTML = `
+                <div class="flex justify-between items-start mb-6"><div><h2 class="text-2xl font-bold">${question.title}</h2><p class="mt-2 text-gray-600 whitespace-pre-wrap">${question.questionText}</p></div><div class="flex space-x-2"><button onclick="window.openQuestionModalForEdit('${question.id}')" class="text-sm text-indigo-600 hover:text-indigo-800">수정</button><button onclick="window.deleteQuestion('${question.id}')" class="text-sm text-red-600 hover:text-red-800">삭제</button></div></div>
+                <div class="mb-6"><h3 class="font-semibold mb-2">채점 기준</h3><ul class="list-disc list-inside space-y-1 text-gray-700">${Array.isArray(question.rubric) ? question.rubric.map(r => `<li>${r.criterion} (${r.maxScore}점)</li>`).join('') : ''}</ul></div>
+                <div>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-semibold">학생 제출 현황</h3>
+                        ${downloadButtonHTML}
+                    </div>
+                    ${submissionListHTML}
+                </div>`;
         }
 
-        function renderStudentContent() {
+        function renderStudentContent(draftToPreserve = '') {
              if (!activeQuestionId) {
                 contentContainer.innerHTML = `<div class="text-center py-20"><h2 class="text-xl font-semibold text-gray-700">문제를 선택해주세요.</h2></div>`;
                 return;
@@ -379,24 +422,6 @@
                  return;
             }
             
-            // ✅ 1번 문제 해결: 렌더링 시 현재 입력값 저장
-            const answerTextarea = document.getElementById('student-answer-textarea');
-            const currentDraft = answerTextarea ? answerTextarea.value : '';
-
-            const mySubmission = submissions[activeQuestionId]?.[currentStudentIdentifier];
-            const lastAttempt = mySubmission && Array.isArray(mySubmission.attempts) && mySubmission.attempts.length > 0 ? mySubmission.attempts[mySubmission.attempts.length - 1] : null;
-            const isGraded = !!(lastAttempt && lastAttempt.scores);
-            const needsSubmission = !lastAttempt || isGraded;
-            const maxScore = Array.isArray(question.rubric) ? question.rubric.reduce((a, b) => a + (b.maxScore || 0), 0) : 0;
-            const totalScore = isGraded ? Object.values(lastAttempt.scores).reduce((a, b) => a + b, 0) : 0;
-            const isPerfect = isGraded && totalScore === maxScore && maxScore > 0;
-
-            const submissionFormHTML = isPerfect
-                ? `<div class="text-center p-6 bg-green-100 rounded-lg"><h3 class="text-2xl font-bold text-green-800">🎉 만점입니다! 🎉</h3><p class="text-green-700 mt-2">정말 잘했어요! 다음 문제에 도전해보세요.</p></div>`
-                : `<h3 class="text-xl font-semibold mb-4">${lastAttempt && isGraded ? '답변 수정하기' : '답변 작성하기'}</h3>
-                   <textarea id="student-answer-textarea" class="w-full h-40 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="여기에 답변을 입력하세요..."></textarea>
-                   <button id="submit-answer-btn" class="mt-4 w-full bg-teal-500 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-teal-600 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center">제출하기</button>`;
-
             contentContainer.innerHTML = `
                 <h2 class="text-2xl font-bold">${question.title}</h2>
                 <p class="mt-2 mb-6 text-gray-600 whitespace-pre-wrap">${question.questionText}</p>
@@ -404,26 +429,11 @@
                     <h3 class="font-semibold mb-2 text-teal-800">채점 기준</h3>
                     <ul class="list-disc list-inside space-y-1 text-teal-700">${Array.isArray(question.rubric) ? question.rubric.map(r => `<li>${r.criterion} (${r.maxScore}점)</li>`).join('') : ''}</ul>
                 </div>
-                ${submissionFormHTML}
+                <div id="submission-form-container"></div>
                 <div id="submission-history-container"></div>`;
             
-            // ✅ 1번 문제 해결: 저장된 입력값 복원
-            const newAnswerTextarea = document.getElementById('student-answer-textarea');
-            if(newAnswerTextarea) {
-                if (needsSubmission && lastAttempt && isGraded) {
-                     newAnswerTextarea.value = lastAttempt.answer;
-                } else {
-                     newAnswerTextarea.value = currentDraft;
-                }
-            }
-            
-            renderSubmissionHistory(); // 기록 부분만 따로 렌더링
+            renderSubmissionHistory(draftToPreserve);
 
-            if (!isPerfect) {
-                document.getElementById('submit-answer-btn')?.addEventListener('click', submitAnswer);
-            }
-
-             // ✅ 2번 문제 해결: 문제 목록으로 돌아가기 버튼
             document.getElementById('main-controls').innerHTML = `<button id="back-to-list-btn" class="text-sm text-gray-600 hover:text-teal-700 font-medium">문제 목록</button>`;
             document.getElementById('back-to-list-btn').addEventListener('click', () => {
                 mainView.classList.add('hidden');
@@ -431,30 +441,79 @@
             });
         }
 
-        // ✅ 1번 문제 해결: 제출 기록만 따로 그리는 함수
-        function renderSubmissionHistory() {
+        function renderSubmissionHistory(draftToPreserve = '') {
             const historyContainer = document.getElementById('submission-history-container');
-            if (!historyContainer) return;
+            const formContainer = document.getElementById('submission-form-container');
+            if (!historyContainer || !formContainer) return;
 
             const mySubmission = submissions[activeQuestionId]?.[currentStudentIdentifier];
             const question = questions.find(q => q.id === activeQuestionId);
             if (!question) return;
 
             const maxScore = Array.isArray(question.rubric) ? question.rubric.reduce((a, b) => a + (b.maxScore || 0), 0) : 0;
+            const lastAttempt = mySubmission && Array.isArray(mySubmission.attempts) && mySubmission.attempts.length > 0 ? mySubmission.attempts[mySubmission.attempts.length - 1] : null;
+            const isGraded = !!(lastAttempt && lastAttempt.scores);
+            const totalScore = isGraded ? Object.values(lastAttempt.scores).reduce((a, b) => a + b, 0) : 0;
+            const isPerfect = isGraded && totalScore === maxScore && maxScore > 0;
+            const needsSubmission = !lastAttempt || isGraded;
+            
+            if (isPerfect) {
+                 formContainer.innerHTML = `<div class="text-center p-6 bg-green-100 rounded-lg"><h3 class="text-2xl font-bold text-green-800">🎉 만점입니다! 🎉</h3><p class="text-green-700 mt-2">정말 잘했어요! 다음 문제에 도전해보세요.</p></div>`;
+            } else {
+                formContainer.innerHTML = `<h3 class="text-xl font-semibold mb-4">${lastAttempt && isGraded ? '답변 수정하기' : '답변 작성하기'}</h3>
+                   <textarea id="student-answer-textarea" class="w-full h-40 p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="여기에 답변을 입력하세요..."></textarea>
+                   <button id="submit-answer-btn" class="mt-4 w-full bg-teal-500 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-teal-600 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center">제출하기</button>`;
+                
+                const newAnswerTextarea = document.getElementById('student-answer-textarea');
+                if (needsSubmission && lastAttempt && isGraded) {
+                    newAnswerTextarea.value = lastAttempt.answer;
+                } else {
+                    newAnswerTextarea.value = draftToPreserve;
+                }
+                document.getElementById('submit-answer-btn').addEventListener('click', submitAnswer);
+            }
+
 
             if (mySubmission && Array.isArray(mySubmission.attempts)) {
                 historyContainer.innerHTML = `<h3 class="text-xl font-semibold mt-10 mb-4">나의 제출 기록</h3><div class="space-y-6">${mySubmission.attempts.slice().reverse().map((attempt, index) => {
                     const submissionNumber = mySubmission.attempts.length - index;
                     const attemptTotalScore = attempt.scores ? Object.values(attempt.scores).reduce((a, b) => a + b, 0) : 0;
-                    const feedbackDisplay = attempt.scores 
-                        ? `<div class="border-t pt-4 mt-4">
-                             <h4 class="font-semibold mb-2">AI 피드백</h4>
-                             <div class="bg-yellow-50 p-3 rounded-md mb-3"><p class="text-gray-700 whitespace-pre-wrap">${attempt.feedback || '피드백이 없습니다.'}</p></div>
-                             <div class="flex items-center space-x-4 flex-wrap">${Object.entries(attempt.scores).map(([crit, score]) => `<div class="text-sm"><span class="font-medium">${crit}:</span> ${score}점</div>`).join('')}
-                                <div class="font-bold text-indigo-600">총점: ${attemptTotalScore} / ${maxScore}점</div>
-                             </div>
-                           </div>` 
-                        : `<p class="text-blue-600 font-medium flex items-center"><span class="spinner !w-4 !h-4 !border-2 mr-2"></span> ${attempt.feedback || 'AI가 채점 중입니다...'}</p>`;
+                    
+                    // ✅ 수정: 피드백 표시 로직 변경
+                    const feedbackDisplay = (() => {
+                        if (!attempt.scores) {
+                            return `<p class="text-blue-600 font-medium flex items-center"><span class="spinner !w-4 !h-4 !border-2 mr-2"></span> ${attempt.feedback || 'AI가 채점 중입니다...'}</p>`;
+                        }
+
+                        let criteriaHtml = '';
+                        if (Array.isArray(attempt.criteriaFeedback)) {
+                            criteriaHtml = attempt.criteriaFeedback.map(cf => `
+                                <div class="mt-3">
+                                    <p class="text-sm font-semibold text-gray-700">${cf.criterion} (${cf.score}점)</p>
+                                    <p class="text-sm text-gray-600 pl-2 border-l-2 border-gray-200 ml-1">${cf.feedback}</p>
+                                </div>
+                            `).join('');
+                        }
+
+                        const summaryHtml = attempt.summaryFeedback
+                            ? `<div class="bg-blue-50 p-3 rounded-md mb-4"><p class="text-gray-800 font-semibold whitespace-pre-wrap">${attempt.summaryFeedback}</p></div>`
+                            : '';
+                        
+                        // Fallback for old feedback format (single string)
+                        const oldFeedbackHtml = !attempt.criteriaFeedback && attempt.feedback
+                            ? `<div class="bg-yellow-50 p-3 rounded-md mb-3"><p class="text-gray-700 whitespace-pre-wrap">${attempt.feedback}</p></div>`
+                            : '';
+
+                        return `<div class="border-t pt-4 mt-4">
+                                     <h4 class="font-semibold mb-2">AI 피드백</h4>
+                                     ${summaryHtml}
+                                     ${oldFeedbackHtml}
+                                     <div class="space-y-2">${criteriaHtml}</div>
+                                     <div class="flex items-center space-x-4 flex-wrap mt-4 border-t pt-2">
+                                        <div class="font-bold text-indigo-600">총점: ${attemptTotalScore} / ${maxScore}점</div>
+                                     </div>
+                                   </div>`;
+                    })();
 
                     return `<div class="border rounded-lg p-4 bg-gray-50">
                                 <p class="text-sm font-semibold text-gray-500 mb-2">${submissionNumber}번째 제출</p>
@@ -465,10 +524,6 @@
             } else {
                 historyContainer.innerHTML = '';
             }
-            
-            const lastAttempt = mySubmission && Array.isArray(mySubmission.attempts) && mySubmission.attempts.length > 0 ? mySubmission.attempts[mySubmission.attempts.length - 1] : null;
-            const isGraded = !!(lastAttempt && lastAttempt.scores);
-            const needsSubmission = !lastAttempt || isGraded;
             
             const submitButton = document.getElementById('submit-answer-btn');
             const answerTextarea = document.getElementById('student-answer-textarea');
@@ -488,36 +543,339 @@
 
 
         // --- 데이터 처리 함수 ---
-        // (기존과 동일, 변경 없음)
+        // 학생
         async function submitAnswer() {
-            // ...
+            const answer = document.getElementById('student-answer-textarea').value.trim();
+            if (!answer) { alert('답변을 입력해주세요.'); return; }
+
+            const submitButton = document.getElementById('submit-answer-btn');
+            submitButton.disabled = true;
+            submitButton.innerHTML = `<div class="spinner"></div> AI가 채점 중입니다...`;
+
+            const question = questions.find(q => q.id === activeQuestionId);
+
+            try {
+                const aiResult = await generateAIFeedbackForStudent(question, answer);
+                const newAttempt = { 
+                    answer, 
+                    scores: aiResult.scores, 
+                    criteriaFeedback: aiResult.criteriaFeedback,
+                    summaryFeedback: aiResult.summaryFeedback,
+                    timestamp: new Date() 
+                };
+                
+                const submissionRef = doc(db, 'artifacts', firestoreAppId, 'public', 'data', 'questions', activeQuestionId, 'submissions', currentStudentIdentifier);
+                await setDoc(submissionRef, { studentIdentifier: currentStudentIdentifier, attempts: arrayUnion(newAttempt) }, { merge: true });
+            } catch (error) {
+                console.error("AI 피드백 생성 또는 답변 제출 오류:", error);
+                alert("AI 채점 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+                
+                const newAttemptWithError = { answer, scores: null, feedback: "AI 채점 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 선생님께 문의하세요.", timestamp: new Date() };
+                const submissionRef = doc(db, 'artifacts', firestoreAppId, 'public', 'data', 'questions', activeQuestionId, 'submissions', currentStudentIdentifier);
+                try {
+                     await setDoc(submissionRef, { studentIdentifier: currentStudentIdentifier, attempts: arrayUnion(newAttemptWithError) }, { merge: true });
+                } catch (dbError) {
+                    console.error("오류 답변 저장 실패:", dbError);
+                    submitButton.disabled = false;
+                    submitButton.textContent = '제출하기';
+                }
+            }
         }
+        
+        // ✅ 수정: AI 피드백 요청 형식 변경
         async function generateAIFeedbackForStudent(question, studentAnswer) {
-            // ...
+             const rubricString = Array.isArray(question.rubric) ? question.rubric.map(r => `- ${r.criterion} (${r.maxScore}점)`).join('\n') : '채점 기준 없음';
+            
+            const systemPrompt = "당신은 학생들의 서술형 답안을 채점하고 건설적인 피드백을 제공하는 유능하고 친절한 AI 선생님입니다. 제시된 채점 기준(루브릭)에 따라 학생의 답변을 엄격하고 객관적으로 평가해주세요. 학생이 더 발전할 수 있도록 긍정적이고 구체적인 조언을 담아 피드백을 작성해야 합니다.";
+
+            const userQuery = `다음은 학생이 서술형 문제에 대해 제출한 답변입니다. 채점 기준에 따라 각 항목별 점수와 개별 피드백을 할당하고, 마지막에 한 문장으로 된 종합 피드백을 작성해주세요. 개별 피드백은 학생이 어떤 부분을 잘했고 어떤 부분을 보완해야 할지 구체적으로 알려주어야 합니다.
+            
+            ### 문제
+            ${question.questionText}
+
+            ### 학생 답변
+            ${studentAnswer}
+
+            ### 채점 기준 (루브릭)
+            ${rubricString}
+
+            ### 출력 형식
+            반드시 아래 JSON 형식에 맞춰서 응답해주세요.`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            criteriaFeedback: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        criterion: { type: "STRING" },
+                                        score: { type: "NUMBER" },
+                                        feedback: { type: "STRING" }
+                                    },
+                                    required: ["criterion", "score", "feedback"]
+                                }
+                            },
+                            summaryFeedback: { type: "STRING" }
+                        },
+                        required: ["criteriaFeedback", "summaryFeedback"]
+                    }
+                }
+            };
+            
+            const response = await fetch(apiUrl, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify(payload) 
+            });
+
+            if (!response.ok) throw new Error(`API 요청 실패: ${response.statusText}`);
+
+            const result = await response.json();
+            const aiResponseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (aiResponseText) {
+                const aiData = JSON.parse(aiResponseText);
+                const scoresObject = {};
+                if (Array.isArray(aiData.criteriaFeedback) && Array.isArray(question.rubric)) {
+                    aiData.criteriaFeedback.forEach(item => {
+                        const rubricItem = question.rubric.find(r => r.criterion === item.criterion);
+                        if (rubricItem) {
+                            scoresObject[item.criterion] = Math.min(item.score, rubricItem.maxScore);
+                        }
+                    });
+                }
+                return { 
+                    scores: scoresObject, 
+                    criteriaFeedback: aiData.criteriaFeedback, 
+                    summaryFeedback: aiData.summaryFeedback 
+                };
+            } else {
+                 throw new Error("AI로부터 유효한 응답을 받지 못했습니다.");
+            }
         }
+
+        // 관리자
         async function handleQuestionFormSubmit(e) {
-            // ...
+            e.preventDefault();
+            const id = document.getElementById('question-id-input').value;
+            const rubricItems = document.querySelectorAll('.rubric-item');
+            const rubric = Array.from(rubricItems).map(item => ({ criterion: item.querySelector('.rubric-criterion').value, maxScore: parseInt(item.querySelector('.rubric-score').value, 10) }));
+            if (rubric.some(r => !r.criterion || isNaN(r.maxScore))) { alert('모든 채점 기준의 내용과 점수를 입력해주세요.'); return; }
+            const questionData = { title: document.getElementById('question-title-input').value, questionText: document.getElementById('question-text-input').value, rubric };
+            const questionId = id || Date.now().toString();
+            if (!id) questionData.createdAt = new Date();
+            const questionRef = doc(db, 'artifacts', firestoreAppId, 'public', 'data', 'questions', questionId);
+            await setDoc(questionRef, questionData, { merge: true });
+            if (!id) activeQuestionId = questionId;
+            closeQuestionModal();
         }
+        
         window.gradeSubmission = (questionId, studentId) => {
-            // ...
-        }
+            const question = questions.find(q => q.id === questionId);
+            const submission = submissions[questionId]?.[studentId];
+            if (!question || !submission) return;
+            const lastAttempt = submission.attempts[submission.attempts.length - 1];
+            const modalId = `grading-modal-${studentId}`;
+            document.getElementById(modalId)?.remove();
+
+            const modalContent = `<div class="fixed inset-0 z-50 flex items-center justify-center p-4" id="${modalId}">
+                <div class="modal-backdrop fixed inset-0 bg-black bg-opacity-50"></div>
+                <div class="modal-content bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-8 relative scale-in">
+                    <h2 class="text-2xl font-bold mb-4">"${submission.studentIdentifier.replace('_',' ')}" 학생 채점 (AI 결과 검토)</h2>
+                    <div class="mb-6 p-4 bg-gray-50 rounded-lg"><p class="font-semibold text-gray-500 mb-2">학생 답변</p><p class="text-gray-800 whitespace-pre-wrap">${lastAttempt.answer}</p></div>
+                    <form id="grading-form-${studentId}">
+                        <div class="space-y-4 mb-6">${(Array.isArray(question.rubric) ? question.rubric : []).map(r => `<div><label class="block text-sm font-medium text-gray-700">${r.criterion} (최대 ${r.maxScore}점)</label><input type="number" class="grading-score mt-1 w-full px-3 py-2 border rounded-lg" data-criterion="${r.criterion}" min="0" max="${r.maxScore}" required></div>`).join('')}</div>
+                        <div class="mb-6"><label class="block text-sm font-medium text-gray-700 mb-1">종합 피드백</label><textarea id="grading-feedback-${studentId}" rows="4" class="mt-1 w-full px-3 py-2 border rounded-lg" required></textarea></div>
+                        <div class="flex justify-between items-center">
+                            <button type="button" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm" onclick="window.deleteSingleSubmission('${questionId}', '${studentId}')">이 제출 기록 삭제</button>
+                            <div class="flex space-x-3">
+                                <button type="button" class="px-4 py-2 bg-gray-200 rounded-lg" onclick="document.getElementById('${modalId}').remove()">취소</button>
+                                <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg">수정 완료</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>`;
+            document.body.insertAdjacentHTML('beforeend', modalContent);
+            
+            // ✅ 수정: 관리자 채점창 피드백 자동 채우기 로직 변경
+            if (lastAttempt.scores) {
+                Object.entries(lastAttempt.scores).forEach(([criterion, score]) => {
+                    const scoreInput = document.querySelector(`#grading-form-${studentId} .grading-score[data-criterion="${criterion}"]`);
+                    if (scoreInput) scoreInput.value = score;
+                });
+            }
+
+            let combinedFeedback = '';
+            if (lastAttempt.summaryFeedback) {
+                combinedFeedback += `[종합] ${lastAttempt.summaryFeedback}\n\n`;
+            }
+            if (Array.isArray(lastAttempt.criteriaFeedback)) {
+                combinedFeedback += lastAttempt.criteriaFeedback.map(cf => `[${cf.criterion}]: ${cf.feedback}`).join('\n');
+            }
+            if (!combinedFeedback && lastAttempt.feedback) { // Fallback for old format
+                combinedFeedback = lastAttempt.feedback;
+            }
+            document.getElementById(`grading-feedback-${studentId}`).value = combinedFeedback;
+
+
+            document.getElementById(modalId).querySelector('.modal-backdrop').addEventListener('click', () => document.getElementById(modalId).remove());
+            document.getElementById(`grading-form-${studentId}`).addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const scores = {};
+                e.target.querySelectorAll('.grading-score').forEach(input => { scores[input.dataset.criterion] = parseInt(input.value, 10); });
+                const feedback = e.target.querySelector(`#grading-feedback-${studentId}`).value;
+                const updatedAttempts = [...submission.attempts];
+                // ✅ 수정: 선생님이 수정한 피드백은 기존처럼 단일 문자열로 저장
+                updatedAttempts[updatedAttempts.length - 1] = { ...lastAttempt, scores, feedback, criteriaFeedback: null, summaryFeedback: null };
+                const submissionRef = doc(db, 'artifacts', firestoreAppId, 'public', 'data', 'questions', questionId, 'submissions', studentId);
+                await updateDoc(submissionRef, { attempts: updatedAttempts });
+                document.getElementById(modalId).remove();
+            });
+        };
+
         window.downloadSubmissionsAsCSV = (questionId) => {
-            // ...
-        }
+            const question = questions.find(q => q.id === questionId);
+            const subs = submissions[questionId];
+            if (!question || !subs) {
+                alert("다운로드할 데이터가 없습니다.");
+                return;
+            }
+
+            let csvContent = "\uFEFF"; 
+
+            const rubricHeaders = Array.isArray(question.rubric) ? question.rubric.map(r => `${r.criterion} (점수)`) : [];
+            const headers = ['학번', '이름', '제출 횟수', '최종 답변', ...rubricHeaders, '총점', '최종 피드백'];
+            csvContent += headers.join(',') + '\r\n';
+
+            for (const sub of Object.values(subs)) {
+                const lastAttempt = sub.attempts[sub.attempts.length - 1];
+                if (!lastAttempt) continue;
+
+                const [studentId, studentName] = sub.studentIdentifier.split('_');
+                const submissionCount = sub.attempts.length;
+                const finalAnswer = `"${lastAttempt.answer?.replace(/"/g, '""') || ''}"`;
+                
+                const scores = Array.isArray(question.rubric) ? question.rubric.map(r => lastAttempt.scores?.[r.criterion] ?? '미채점') : [];
+                const totalScore = scores.reduce((acc, score) => acc + (isNaN(score) ? 0 : Number(score)), 0);
+                
+                // ✅ 수정: CSV 다운로드 시 피드백 형식 분기 처리
+                let combinedFeedback = '';
+                if (lastAttempt.summaryFeedback) {
+                    combinedFeedback += `[종합] ${lastAttempt.summaryFeedback} `;
+                }
+                if (Array.isArray(lastAttempt.criteriaFeedback)) {
+                    combinedFeedback += lastAttempt.criteriaFeedback.map(cf => `[${cf.criterion}]: ${cf.feedback}`).join(' | ');
+                }
+                if (!combinedFeedback && lastAttempt.feedback) { 
+                    combinedFeedback = lastAttempt.feedback;
+                }
+                const finalFeedback = `"${combinedFeedback.replace(/"/g, '""')}"`;
+                
+                const row = [studentId, studentName, submissionCount, finalAnswer, ...scores, totalScore, finalFeedback];
+                csvContent += row.join(',') + '\r\n';
+            }
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            const safeTitle = question.title.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+            link.setAttribute("download", `${safeTitle}_답변_결과.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+
+            setTimeout(() => {
+                if(confirm('CSV 다운로드가 완료되었습니다. 이 문제에 대한 모든 학생 데이터를 Firebase에서 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+                    const deletePromises = Object.keys(subs).map(studentId => {
+                        const subDocRef = doc(db, 'artifacts', firestoreAppId, 'public', 'data', 'questions', questionId, 'submissions', studentId);
+                        return deleteDoc(subDocRef);
+                    });
+
+                    Promise.all(deletePromises)
+                        .then(() => {
+                            alert('데이터가 성공적으로 삭제되었습니다.');
+                        })
+                        .catch(error => {
+                            console.error("데이터 삭제 중 오류 발생:", error);
+                            alert("데이터 삭제 중 오류가 발생했습니다.");
+                        });
+                }
+            }, 100);
+        };
+        
         window.deleteQuestion = async (id) => {
-            // ...
-        }
+            if(confirm('정말로 이 문제를 삭제하시겠습니까? 관련된 모든 학생 데이터도 함께 삭제됩니다.')) {
+                const subsCollectionRef = collection(db, 'artifacts', firestoreAppId, 'public', 'data', 'questions', id, 'submissions');
+                const subsSnapshot = await getDocs(subsCollectionRef);
+                const deletePromises = subsSnapshot.docs.map(doc => deleteDoc(doc.ref));
+                await Promise.all(deletePromises);
+                
+                await deleteDoc(doc(db, 'artifacts', firestoreAppId, 'public', 'data', 'questions', id));
+                
+                if (unsubscribeSubmissions[id]) { 
+                    unsubscribeSubmissions[id](); 
+                    delete unsubscribeSubmissions[id]; 
+                }
+            }
+        };
+
+        window.deleteSingleSubmission = async (questionId, studentId) => {
+            if(confirm(`'${studentId.replace('_', ' ')}' 학생의 모든 제출 기록을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
+                try {
+                    const subDocRef = doc(db, 'artifacts', firestoreAppId, 'public', 'data', 'questions', questionId, 'submissions', studentId);
+                    await deleteDoc(subDocRef);
+                    document.getElementById(`grading-modal-${studentId}`)?.remove();
+                    alert('학생의 제출 기록이 삭제되었습니다.');
+                } catch (error) {
+                    console.error("개별 제출 기록 삭제 오류:", error);
+                    alert("삭제 중 오류가 발생했습니다.");
+                }
+            }
+        };
+
         function openQuestionModalForCreate() {
-            // ...
+            document.getElementById('question-form').reset();
+            document.getElementById('question-id-input').value = '';
+            document.getElementById('modal-title').textContent = '새 문제 만들기';
+            document.getElementById('rubric-container').innerHTML = '';
+            addRubricItem();
+            questionModal.classList.remove('hidden');
         }
+
         window.openQuestionModalForEdit = (id) => {
-            // ...
+            const question = questions.find(q => q.id === id);
+            if(!question) return;
+            document.getElementById('question-form').reset();
+            document.getElementById('question-id-input').value = id;
+            document.getElementById('modal-title').textContent = '문제 수정하기';
+            document.getElementById('question-title-input').value = question.title;
+            document.getElementById('question-text-input').value = question.questionText;
+            const rubricContainer = document.getElementById('rubric-container');
+            rubricContainer.innerHTML = '';
+            if (Array.isArray(question.rubric)) {
+                question.rubric.forEach(r => addRubricItem(r.criterion, r.maxScore));
+            }
+            questionModal.classList.remove('hidden');
         }
-        function closeQuestionModal() { 
-            // ...
-        }
+
+        function closeQuestionModal() { questionModal.classList.add('hidden'); }
+
         function addRubricItem(criterion = '', score = '') {
-            // ...
+            const div = document.createElement('div');
+            div.className = 'rubric-item flex items-center space-x-2';
+            div.innerHTML = `<input type="text" class="rubric-criterion w-full px-3 py-2 border rounded-lg" placeholder="채점 기준 (예: 내용의 충실성)" value="${criterion}" required><input type="number" class="rubric-score w-24 px-3 py-2 border rounded-lg" placeholder="점수" value="${score}" required><button type="button" class="text-red-500 hover:text-red-700 p-1" onclick="this.parentElement.remove()"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>`;
+            document.getElementById('rubric-container').appendChild(div);
         }
 
         // --- 앱 시작 ---
