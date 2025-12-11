@@ -130,7 +130,7 @@
         const firestoreAppId = firebaseConfig.projectId; 
         
         const apiKey = "AIzaSyB-yPFJQDAldeutZ5waNxkD3vAM_NWJkEA";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
 
         let app, auth, db, userId, isAdminMode;
         let questions = [], submissions = {};
@@ -883,5 +883,6 @@
     </script>
 </body>
 </html>
+
 
 
